@@ -1,0 +1,172 @@
+
+<!-- viewer.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riders FC Financial Report - Viewer</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom right, #e0f7fa, #f1f8e9);
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .card-header {
+      background: #009688;
+      color: white;
+      font-size: 1.2rem;
+      border-top-left-radius: 15px;
+      border-top-right-radius: 15px;
+      padding: 10px 15px;
+    }
+    .toggle-btn {
+      color: #007BFF;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .highlight {
+      font-weight: bold;
+    }
+    .bank-info {
+      text-align: center;
+      background-color: #fffde7;
+      border: 2px solid #fbc02d;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <h3 class="text-center text-primary mb-4">📋 Riders FC Directors Contribution Report</h3>
+
+  <div class="bank-info">
+    <strong>Fidelity Bank</strong><br>
+    <strong>RIDERS FOOTBALL CLUB</strong><br>
+    Account Number: <strong>5601215810</strong>
+  </div>
+
+  <div id="viewerContent"></div>
+
+  <div class="card">
+    <div class="card-header">💰 Overall Totals</div>
+    <div class="card-body" id="overallTotals"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">📊 Contribution Percentages</div>
+    <div class="card-body" id="percentagesSection"></div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+  apiKey: "AIzaSyDz1suJpOPHC6N7cEZS0pBqVY-z7U4FEwU",
+  authDomain: "upload-34aa5.firebaseapp.com",
+  databaseURL: "https://upload-34aa5-default-rtdb.firebaseio.com",
+  projectId: "upload-34aa5",
+  storageBucket: "upload-34aa5.firebasestorage.app",
+  messagingSenderId: "680131375536",
+  appId: "1:680131375536:web:081ef6db97ffe9fe816675",
+  measurementId: "G-CGS8GJZQL3"
+};
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let users = [];
+
+    async function fetchData() {
+      const usersSnap = await db.collection('users').get();
+      const contribSnap = await db.collection('contributions').orderBy('createdAt', 'asc').get();
+
+      users = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const contributions = contribSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      renderViewer(users, contributions);
+    }
+
+    function renderViewer(users, contributions) {
+      const container = document.getElementById('viewerContent');
+      const totalsDiv = document.getElementById('overallTotals');
+      const percentageDiv = document.getElementById('percentagesSection');
+      container.innerHTML = '';
+      totalsDiv.innerHTML = '';
+      percentageDiv.innerHTML = '';
+
+      let grandExpected = 0, grandPaid = 0;
+      const userContributions = [];
+
+      users.forEach(user => {
+        let totalPaid = 0, totalExpected = 0;
+        const details = [];
+
+        contributions.forEach(c => {
+          const detail = c.details.find(d => d.userId === user.id);
+          const paid = detail ? detail.amount : 0;
+          totalPaid += paid;
+          totalExpected += c.expected;
+
+          const status = paid >= c.expected ? `<span class='text-success'>₦${paid}</span>` : `<span class='text-danger'>₦${paid} / ₦${c.expected}</span>`;
+          details.push(`<li><strong>${c.name}:</strong> ${status}</li>`);
+        });
+
+        grandExpected += totalExpected;
+        grandPaid += totalPaid;
+        const balance = totalExpected - totalPaid;
+
+        userContributions.push({ name: user.name, paid: totalPaid });
+
+        container.innerHTML += `
+          <div class="card">
+            <div class="card-header">${user.name}</div>
+            <div class="card-body">
+              <p><strong>Total Expected:</strong> ₦${totalExpected}</p>
+              <p><strong>Total Contributed:</strong> ₦${totalPaid}</p>
+              <p><strong>Balance:</strong> ₦${balance}</p>
+              <div class="toggle-btn" onclick="toggleBreakdown('${user.id}')">Show Breakdown</div>
+              <ul id="breakdown-${user.id}" style="display:none; margin-top:10px;">
+                ${details.join('')}
+              </ul>
+            </div>
+          </div>`;
+      });
+
+      const totalBalance = grandExpected - grandPaid;
+      totalsDiv.innerHTML = `
+        <p><strong>Total Expected Payment:</strong> ₦${grandExpected}</p>
+        <p><strong>Total Contributed Payment:</strong> ₦${grandPaid}</p>
+        <p><strong>Total Balance to be Paid:</strong> ₦${totalBalance}</p>`;
+
+      // Correct Percentage Calculation
+      userContributions.forEach(u => {
+        u.percentage = grandPaid > 0 ? ((u.paid / grandPaid) * 100).toFixed(2) : "0.00";
+      });
+
+      userContributions.sort((a, b) => b.paid - a.paid);
+      percentageDiv.innerHTML = '<ul class="list-group">' + userContributions.map(p => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          ${p.name}
+          <span class="badge bg-primary rounded-pill">${p.percentage}%</span>
+        </li>`).join('') + '</ul>';
+    }
+
+    function toggleBreakdown(id) {
+      const el = document.getElementById('breakdown-' + id);
+      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    fetchData();
+  </script>
+</body>
+</html>
